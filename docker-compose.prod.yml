@@ -1,0 +1,25 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    image: acquisitions-app:latest
+    container_name: acquisitions-app-prod
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      NODE_ENV: production
+      # DATABASE_URL itself is NOT set here — it's injected via .env.production
+      # (or your platform's secret manager) and points straight at Neon Cloud,
+      # e.g. postgresql://user:password@ep-xxxx.aws.neon.tech/neondb?sslmode=require
+      # No Neon Local proxy runs in this file at all.
+    ports:
+      - '3000:3000'
+    networks:
+      - acquisitions-net
+
+networks:
+  acquisitions-net:
+    driver: bridge

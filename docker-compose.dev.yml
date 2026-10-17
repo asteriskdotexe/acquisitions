@@ -1,0 +1,54 @@
+services:
+  # Neon Local: a local proxy that creates a real, ephemeral Neon branch for
+  # this dev session and speaks Postgres on :5432. The branch is deleted
+  # automatically when this container stops, so every `docker compose up`
+  # starts from a clean copy of your parent branch's schema/data.
+  # Docs: https://neon.com/docs/local/neon-local
+  neon-local:
+    image: neondatabase/neon_local:latest
+    container_name: acquisitions-neon-local
+    ports:
+      - '5432:5432'
+    env_file:
+      - .env.development
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -h localhost -p 5432 -U neon || exit 1']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - acquisitions-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    container_name: acquisitions-app-dev
+    env_file:
+      - .env.development
+    environment:
+      NODE_ENV: development
+      # Points at the neon-local service by its Compose service name, so the
+      # app and Neon Local resolve each other over the Compose network.
+      DATABASE_URL: postgres://neon:npg@neon-local:5432/neondb?sslmode=require
+    ports:
+      - '3000:3000'
+    volumes:
+      # Bind-mount source for live reload (used with `node --watch` in the
+      # Dockerfile's development stage); node_modules stays inside the
+      # container so your host's installed packages never clash with it.
+      - ./src:/app/src
+      - ./package.json:/app/package.json
+      - ./drizzle.config.js:/app/drizzle.config.js
+      - /app/node_modules
+    depends_on:
+      neon-local:
+        condition: service_healthy
+    networks:
+      - acquisitions-net
+
+networks:
+  acquisitions-net:
+    driver: bridge
