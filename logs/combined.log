@@ -104,3 +104,54 @@
 {"level":"info","message":"::1 - - [11/Oct/2026:13:29:13 +0000] \"GET /health?email=abc%40js.com HTTP/1.1\" 403 51 \"-\" \"HTTPie\"","service":"acquisitions-api"}
 {"ip":"::1","level":"warn","message":"Rate limit exceeded","path":"/health","service":"acquisitions-api","userAgent":"HTTPie"}
 {"level":"info","message":"::1 - - [11/Oct/2026:13:29:14 +0000] \"GET /health?email=abc%40js.com HTTP/1.1\" 403 51 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:33:31 +0000] \"GET /api/ HTTP/1.1\" 200 42 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:33:36 +0000] \"GET /api/users HTTP/1.1\" 401 68 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:34:10 +0000] \"GET /api/auth/sign-in HTTP/1.1\" 404 155 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"error","message":"Error authenticating the user: Error: Failed query: select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2\nparams: admin@jsmastery.pro,1","service":"acquisitions-api"}
+{"cause":{"name":"NeonDbError","sourceError":{}},"level":"error","message":"Signin error Failed query: select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2\nparams: admin@jsmastery.pro,1","params":["admin@jsmastery.pro",1],"query":"select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2","service":"acquisitions-api","stack":"Error: Failed query: select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2\nparams: admin@jsmastery.pro,1\n    at NeonHttpPreparedQuery.queryWithCache (file:///D:/hmm/DevOps/Practise/acquisitions/node_modules/drizzle-orm/pg-core/session.js:41:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async NeonHttpPreparedQuery.execute (file:///D:/hmm/DevOps/Practise/acquisitions/node_modules/drizzle-orm/neon-http/session.js:45:20)\n    at async authenticateUser (file:///D:/hmm/DevOps/Practise/acquisitions/src/services/auth.service.js:58:28)\n    at async signin (file:///D:/hmm/DevOps/Practise/acquisitions/src/controllers/auth.controller.js:65:18)"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:34:18 +0000] \"POST /api/auth/sign-in HTTP/1.1\" 500 1053 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"error","message":"Error authenticating the user: Error: Failed query: select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2\nparams: admin@jsmastery.pro,1","service":"acquisitions-api"}
+{"cause":{"name":"NeonDbError","sourceError":{}},"level":"error","message":"Signin error Failed query: select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2\nparams: admin@jsmastery.pro,1","params":["admin@jsmastery.pro",1],"query":"select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2","service":"acquisitions-api","stack":"Error: Failed query: select \"id\", \"name\", \"email\", \"password\", \"role\", \"created_at\", \"updated_at\" from \"users\" where \"users\".\"email\" = $1 limit $2\nparams: admin@jsmastery.pro,1\n    at NeonHttpPreparedQuery.queryWithCache (file:///D:/hmm/DevOps/Practise/acquisitions/node_modules/drizzle-orm/pg-core/session.js:41:15)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async NeonHttpPreparedQuery.execute (file:///D:/hmm/DevOps/Practise/acquisitions/node_modules/drizzle-orm/neon-http/session.js:45:20)\n    at async authenticateUser (file:///D:/hmm/DevOps/Practise/acquisitions/src/services/auth.service.js:58:28)\n    at async signin (file:///D:/hmm/DevOps/Practise/acquisitions/src/controllers/auth.controller.js:65:18)"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:36:17 +0000] \"POST /api/auth/sign-in HTTP/1.1\" 500 1053 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:41:07 +0000] \"GET /api/ HTTP/1.1\" 200 42 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"User admin@jsmastery.pro authenticated successfully","service":"acquisitions-api"}
+{"level":"info","message":"User signed in successfully: admin@jsmastery.pro","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:41:42 +0000] \"POST /api/auth/sign-in HTTP/1.1\" 200 104 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:41:57 +0000] \"POST /api/users HTTP/1.1\" 404 149 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:42:00 +0000] \"GET /api/users HTTP/1.1\" 401 68 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"User admin@jsmastery.pro authenticated successfully","service":"acquisitions-api"}
+{"level":"info","message":"User signed in successfully: admin@jsmastery.pro","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:42:23 +0000] \"POST /api/auth/sign-in HTTP/1.1\" 200 104 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:42:44 +0000] \"POST /api/users HTTP/1.1\" 404 149 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"Getting users...","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:42:49 +0000] \"GET /api/users HTTP/1.1\" 200 361 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"Deleting user 2 (requested by user 1)","service":"acquisitions-api"}
+{"level":"info","message":"User adrian@jsmastery.pro deleted successfully","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:43:14 +0000] \"DELETE /api/users/2 HTTP/1.1\" 200 102 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"Getting users...","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:43:21 +0000] \"GET /api/users/ HTTP/1.1\" 200 211 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:44:11 +0000] \"PUT /api/users/ HTTP/1.1\" 404 149 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"Updating user 1 (requested by user 1)","service":"acquisitions-api"}
+{"level":"info","message":"User admin@acquisitions.com updated successfully","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:44:20 +0000] \"PUT /api/users/1 HTTP/1.1\" 200 198 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"error","message":"Error creating the user: Error: User already exists","service":"acquisitions-api"}
+{"level":"error","message":"Signup error User already exists","service":"acquisitions-api","stack":"Error: User already exists\n    at createUser (file:///D:/hmm/DevOps/Practise/acquisitions/src/services/auth.service.js:33:40)\n    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at async signup (file:///D:/hmm/DevOps/Practise/acquisitions/src/controllers/auth.controller.js:21:18)"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:45:50 +0000] \"POST /api/auth/sign-up HTTP/1.1\" 409 31 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"User shubham@acquisitions.com created successfully","service":"acquisitions-api"}
+{"level":"info","message":"User registered successfully: shubham@acquisitions.com","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:46:03 +0000] \"POST /api/auth/sign-up HTTP/1.1\" 201 111 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"User shubham@acquisitions.com authenticated successfully","service":"acquisitions-api"}
+{"level":"info","message":"User signed in successfully: shubham@acquisitions.com","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:46:21 +0000] \"POST /api/auth/sign-in HTTP/1.1\" 200 110 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:46:30 +0000] \"POST /api/users HTTP/1.1\" 404 149 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:46:34 +0000] \"GET /api/users HTTP/1.1\" 401 68 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:47:32 +0000] \"POST /api/sign-in HTTP/1.1\" 404 151 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"User shubham@acquisitions.com authenticated successfully","service":"acquisitions-api"}
+{"level":"info","message":"User signed in successfully: shubham@acquisitions.com","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:47:42 +0000] \"POST /api/auth/sign-in HTTP/1.1\" 200 110 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"User shubham@acquisitions.com authenticated successfully","service":"acquisitions-api"}
+{"level":"info","message":"User signed in successfully: shubham@acquisitions.com","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:47:57 +0000] \"POST /api/auth/sign-in HTTP/1.1\" 200 110 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:48:06 +0000] \"POST /api/users HTTP/1.1\" 404 149 \"-\" \"HTTPie\"","service":"acquisitions-api"}
+{"level":"info","message":"Getting users...","service":"acquisitions-api"}
+{"level":"info","message":"::1 - - [18/Oct/2026:12:48:11 +0000] \"GET /api/users HTTP/1.1\" 200 369 \"-\" \"HTTPie\"","service":"acquisitions-api"}

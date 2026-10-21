@@ -4,13 +4,13 @@ This app connects to Postgres through [Neon](https://neon.tech). Locally, it tal
 
 ## How the two environments differ
 
-| | Development | Production |
-|---|---|---|
-| Compose file | `docker-compose.dev.yml` | `docker-compose.prod.yml` |
-| Dockerfile target | `development` (hot reload via `node --watch`) | `production` (minimal image, non-root user) |
-| Database | Neon Local proxy container, creates/destroys an ephemeral branch each run | Your real Neon Cloud database, connected directly |
-| `DATABASE_URL` | Fixed local value, hardcoded in `docker-compose.dev.yml` (`postgres://neon:npg@neon-local:5432/...`) | Your actual Neon connection string, supplied via `.env.production` / your secret manager |
-| Env file | `.env.development` | `.env.production` |
+|                   | Development                                                                                          | Production                                                                               |
+| ----------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Compose file      | `docker-compose.dev.yml`                                                                             | `docker-compose.prod.yml`                                                                |
+| Dockerfile target | `development` (hot reload via `node --watch`)                                                        | `production` (minimal image, non-root user)                                              |
+| Database          | Neon Local proxy container, creates/destroys an ephemeral branch each run                            | Your real Neon Cloud database, connected directly                                        |
+| `DATABASE_URL`    | Fixed local value, hardcoded in `docker-compose.dev.yml` (`postgres://neon:npg@neon-local:5432/...`) | Your actual Neon connection string, supplied via `.env.production` / your secret manager |
+| Env file          | `.env.development`                                                                                   | `.env.production`                                                                        |
 
 ---
 
@@ -128,14 +128,14 @@ This is also why `.env.development` and `.env.production` are both gitignored, e
 
 ## 4. File reference
 
-| File | Purpose |
-|---|---|
-| `Dockerfile` | Multi-stage build: `development` (hot reload, full deps) and `production` (minimal, non-root, healthcheck) targets |
-| `docker-compose.dev.yml` | Runs `app` (dev target) + `neon-local` proxy, creates ephemeral branches |
-| `docker-compose.prod.yml` | Runs `app` (production target) only, connects straight to Neon Cloud |
-| `.env.development` | Dev env vars: Neon Local/API credentials, no `DATABASE_URL` (set in compose instead) |
-| `.env.production` | Prod env vars: real `DATABASE_URL`, template only, never commit filled-in |
-| `.dockerignore` | Keeps `node_modules`, `.git`, `.env*`, logs, etc. out of the build context |
+| File                      | Purpose                                                                                                            |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `Dockerfile`              | Multi-stage build: `development` (hot reload, full deps) and `production` (minimal, non-root, healthcheck) targets |
+| `docker-compose.dev.yml`  | Runs `app` (dev target) + `neon-local` proxy, creates ephemeral branches                                           |
+| `docker-compose.prod.yml` | Runs `app` (production target) only, connects straight to Neon Cloud                                               |
+| `.env.development`        | Dev env vars: Neon Local/API credentials, no `DATABASE_URL` (set in compose instead)                               |
+| `.env.production`         | Prod env vars: real `DATABASE_URL`, template only, never commit filled-in                                          |
+| `.dockerignore`           | Keeps `node_modules`, `.git`, `.env*`, logs, etc. out of the build context                                         |
 
 ---
 
