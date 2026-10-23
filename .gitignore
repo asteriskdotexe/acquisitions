@@ -4,4 +4,6 @@ node_modules
 .env.production
 .env.*.local
 logs
-*.log.neon_local/
+*.log
+.neon_local/
+coverage/
