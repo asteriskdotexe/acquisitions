@@ -1,0 +1,65 @@
+name: Lint and Format
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-format:
+    name: ESLint and Prettier
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Both checks run even if the first one fails, so you see every problem
+      # in one go. The job is failed on purpose in the last step.
+      - name: Run ESLint
+        id: eslint
+        continue-on-error: true
+        run: npm run lint
+
+      - name: Run Prettier check
+        id: prettier
+        continue-on-error: true
+        run: npm run format:check
+
+      - name: Annotate problems and fail the job
+        if: steps.eslint.outcome == 'failure' || steps.prettier.outcome == 'failure'
+        env:
+          ESLINT_OUTCOME: ${{ steps.eslint.outcome }}
+          PRETTIER_OUTCOME: ${{ steps.prettier.outcome }}
+        run: |
+          if [ "$ESLINT_OUTCOME" = "failure" ]; then
+            echo "::error title=ESLint found problems::Run 'npm run lint:fix' to fix what can be fixed automatically, then commit the changes. Anything left over has to be fixed by hand."
+          fi
+
+          if [ "$PRETTIER_OUTCOME" = "failure" ]; then
+            echo "::error title=Prettier found formatting problems::Run 'npm run format' to reformat the files, then commit the changes."
+          fi
+
+          {
+            echo "## Lint and format"
+            echo ""
+            echo "| Check | Result | How to fix |"
+            echo "|---|---|---|"
+            echo "| ESLint | $ESLINT_OUTCOME | \`npm run lint:fix\` |"
+            echo "| Prettier | $PRETTIER_OUTCOME | \`npm run format\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit 1

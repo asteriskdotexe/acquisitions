@@ -1,0 +1,180 @@
+name: Tests
+
+on:
+  push:
+    branches: [main, staging]
+  pull_request:
+    branches: [main, staging]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20.x
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      # continue-on-error lets the steps below (artifact upload, summary and
+      # annotations) still run when a test fails. The job is failed on purpose
+      # in the last step.
+      - name: Run tests
+        id: tests
+        continue-on-error: true
+        env:
+          NODE_ENV: test
+          NODE_OPTIONS: --experimental-vm-modules
+          # Placeholder values. The current tests never touch a real database.
+          # When you add tests that do, point this at a throwaway Neon branch.
+          DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+          ARCJET_KEY: ajkey_placeholder_for_ci
+        run: |
+          npm test -- \
+            --ci \
+            --json --outputFile=test-results.json \
+            --coverageReporters=text \
+            --coverageReporters=lcov \
+            --coverageReporters=json-summary
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 30
+          if-no-files-found: warn
+
+      - name: Add test summary
+        if: always()
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const lines = ['## Test results', ''];
+
+          const readJson = file => {
+            try {
+              return JSON.parse(fs.readFileSync(file, 'utf8'));
+            } catch {
+              return null;
+            }
+          };
+
+          const results = readJson('test-results.json');
+
+          if (!results) {
+            lines.push(
+              '❌ No test results were produced. The test run probably crashed before it started. Check the "Run tests" step log.'
+            );
+          } else {
+            lines.push(
+              results.success ? '✅ **All tests passed**' : '❌ **Some tests failed**',
+              '',
+              '| | Passed | Failed | Total |',
+              '|---|---:|---:|---:|',
+              `| Test suites | ${results.numPassedTestSuites} | ${results.numFailedTestSuites} | ${results.numTotalTestSuites} |`,
+              `| Tests | ${results.numPassedTests} | ${results.numFailedTests} | ${results.numTotalTests} |`
+            );
+
+            const failed = results.testResults
+              .flatMap(suite => suite.assertionResults)
+              .filter(test => test.status === 'failed');
+
+            if (failed.length > 0) {
+              lines.push('', '### Failed tests', '');
+              failed.forEach(test => lines.push(`- ${test.fullName}`));
+            }
+          }
+
+          const coverage = readJson('coverage/coverage-summary.json');
+
+          lines.push('', '## Coverage', '');
+
+          if (!coverage) {
+            lines.push('No coverage report was produced.');
+          } else {
+            const total = coverage.total;
+            lines.push(
+              '| Statements | Branches | Functions | Lines |',
+              '|---:|---:|---:|---:|',
+              `| ${total.statements.pct}% | ${total.branches.pct}% | ${total.functions.pct}% | ${total.lines.pct}% |`,
+              '',
+              'The full HTML report is attached to this run as the `coverage-report` artifact (kept for 30 days).'
+            );
+          }
+
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, lines.join('\n') + '\n');
+          NODE
+
+      - name: Annotate test failures
+        if: always() && steps.tests.outcome == 'failure'
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+
+          // Workflow commands need these characters escaped.
+          const escapeData = value =>
+            String(value)
+              .replace(/%/g, '%25')
+              .replace(/\r/g, '%0D')
+              .replace(/\n/g, '%0A');
+          const escapeProperty = value =>
+            escapeData(value).replace(/:/g, '%3A').replace(/,/g, '%2C');
+          const stripColors = value => value.replace(/\u001b\[[0-9;]*m/g, '');
+          // Drop stack frames from node_modules so the annotation stays short.
+          const firstLines = (value, count) =>
+            stripColors(value)
+              .split('\n')
+              .filter(line => !line.includes('node_modules'))
+              .slice(0, count)
+              .join('\n');
+
+          let results;
+          try {
+            results = JSON.parse(fs.readFileSync('test-results.json', 'utf8'));
+          } catch {
+            console.log(
+              '::error title=Tests did not run::No test results were produced. Check the "Run tests" step log.'
+            );
+            process.exit(0);
+          }
+
+          for (const suite of results.testResults) {
+            const file = escapeProperty(path.relative(process.cwd(), suite.name));
+            const failed = suite.assertionResults.filter(
+              test => test.status === 'failed'
+            );
+
+            if (failed.length === 0 && suite.status === 'failed') {
+              const title = escapeProperty('Test suite failed to run');
+              const message = escapeData(firstLines(suite.message || 'Unknown error', 10));
+              console.log(`::error file=${file},title=${title}::${message}`);
+            }
+
+            for (const test of failed) {
+              const title = escapeProperty(`Test failed: ${test.fullName}`);
+              const message = escapeData(
+                firstLines((test.failureMessages || []).join('\n'), 15)
+              );
+              console.log(`::error file=${file},title=${title}::${message}`);
+            }
+          }
+          NODE
+
+      - name: Fail the job if tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
