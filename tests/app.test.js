@@ -1,5 +1,12 @@
-import app from '#src/app.js';
+import { jest } from '@jest/globals';
 import request from 'supertest';
+
+// Skip Arcjet (bot detection, shield, rate limits) in tests.
+jest.unstable_mockModule('#middleware/security.middleware.js', () => ({
+  default: (req, res, next) => next(),
+}));
+
+const { default: app } = await import('#src/app.js');
 
 describe('API Endpoints', () => {
   describe('GET /health', () => {

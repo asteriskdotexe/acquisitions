@@ -6,7 +6,9 @@ import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import authRoutes from '#routes/auth.routes.js';
 import securityMiddleware from '#middleware/security.middleware.js';
+import { attachUser } from '#middleware/auth.middleware.js';
 import usersRoutes from '#routes/users.routes.js';
+import listingsRoutes from '#routes/listings.routes.js';
 
 const app = express();
 
@@ -21,6 +23,10 @@ app.use(
     stream: { write: message => logger.info(message.trim()) },
   })
 );
+
+// Order matters: attachUser needs req.cookies from cookieParser, and must run
+// before securityMiddleware so the rate limit can pick a tier from req.user.
+app.use(attachUser);
 
 app.use(securityMiddleware);
 
@@ -43,6 +49,7 @@ app.get('/api', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
+app.use('/api/listings', listingsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });

@@ -20,21 +20,38 @@ if ! docker info >/dev/null 2>&1; then
     exit 1
 fi
 
+# Run migrations against the PRODUCTION database before starting the new code.
+# .env points at staging, so pass the production URL explicitly.
+PROD_DATABASE_URL=$(grep '^DATABASE_URL=' .env.production | cut -d '=' -f2-)
+
+if [ -z "$PROD_DATABASE_URL" ]; then
+    echo "❌ Error: DATABASE_URL is missing from .env.production"
+    exit 1
+fi
+
+echo "📜 Applying latest schema to the production database..."
+if ! DATABASE_URL="$PROD_DATABASE_URL" npm run db:migrate; then
+    echo "❌ Migration failed. The app was not started."
+    exit 1
+fi
+
 echo "📦 Building and starting production container..."
 echo "   - Using Neon Cloud Database (no local proxy)"
 echo "   - Running in optimized production mode"
 echo ""
 
-# Start production environment
 docker compose -f docker-compose.prod.yml up --build -d
 
-# Wait for DB to be ready (basic health check)
+# Give the app a moment, then make sure it didn't crash on startup
+# (for example because JWT_SECRET is missing)
 echo "⏳ Waiting for app to start..."
 sleep 5
 
-# Run migrations with Drizzle
-echo "📜 Applying latest schema with Drizzle..."
-npm run db:migrate
+if [ "$(docker inspect -f '{{.State.Running}}' acquisitions-app-prod 2>/dev/null)" != "true" ]; then
+    echo "❌ The app container is not running. Last logs:"
+    docker logs --tail 20 acquisitions-app-prod
+    exit 1
+fi
 
 echo ""
 echo "🎉 Production environment started!"
