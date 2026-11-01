@@ -26,3 +26,14 @@ export const authenticateToken = (req, res, next) => {
     });
   }
 };
+
+// Optional auth: if the token cookie holds a valid token, put the decoded
+// user on req.user, otherwise carry on as a guest. It never responds or
+// blocks, so sign-up, sign-in and other public routes still work.
+export const attachUser = (req, res, next) => {
+  const user = jwttoken.tryVerify(req.cookies?.token);
+
+  if (user) req.user = user;
+
+  next();
+};

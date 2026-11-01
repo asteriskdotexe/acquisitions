@@ -15,7 +15,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # QEMU lets the amd64 runner build the linux/arm64 image too.
       - name: Set up QEMU

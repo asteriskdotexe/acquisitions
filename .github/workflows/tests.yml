@@ -16,10 +16,10 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up Node.js 20.x
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 20.x
           cache: npm
@@ -40,6 +40,8 @@ jobs:
           # When you add tests that do, point this at a throwaway Neon branch.
           DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
           ARCJET_KEY: ajkey_placeholder_for_ci
+          ARCJET_ENV: development
+          JWT_SECRET: test-secret
         run: |
           npm test -- \
             --ci \
@@ -50,7 +52,7 @@ jobs:
 
       - name: Upload coverage report
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: coverage-report
           path: coverage/

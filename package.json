@@ -25,7 +25,7 @@
     "db:studio": "drizzle-kit studio",
     "dev:docker": "bash ./scripts/dev-setup.sh",
     "prod:docker": "bash ./scripts/prod-setup.sh",
-    "test": "NODE_OPTIONS=--experimental-vm-modules jest"
+    "test": "NODE_OPTIONS=--experimental-vm-modules ARCJET_ENV=development JWT_SECRET=test-secret jest"
   },
   "keywords": [],
   "author": "",

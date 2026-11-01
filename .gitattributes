@@ -1,0 +1,4 @@
+# Always use LF line endings, on every OS. The app runs in Linux containers
+# and on Linux CI runners, where CRLF breaks shell scripts (bash reads the
+# trailing \r as part of each line, e.g. "/bin/bash^M: bad interpreter").
+* text=auto eol=lf
