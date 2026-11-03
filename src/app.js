@@ -9,6 +9,7 @@ import securityMiddleware from '#middleware/security.middleware.js';
 import { attachUser } from '#middleware/auth.middleware.js';
 import usersRoutes from '#routes/users.routes.js';
 import listingsRoutes from '#routes/listings.routes.js';
+import dealsRoutes from '#routes/deals.routes.js';
 
 const app = express();
 
@@ -50,6 +51,7 @@ app.get('/api', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/listings', listingsRoutes);
+app.use('/api/deals', dealsRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
