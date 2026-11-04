@@ -174,8 +174,7 @@ export const acceptDeal = async ({ id, listing_id }) => {
       db
         .update(listings)
         .set({ status: 'sold', updated_at: sql`now()` })
-        .where(and(eq(listings.id, listing_id), eq(listings.status, 'active')))
-        .returning({ id: listings.id }),
+        .where(and(eq(listings.id, listing_id), eq(listings.status, 'active'))),
 
       // 2. Accept this deal, only if it is still pending.
       db

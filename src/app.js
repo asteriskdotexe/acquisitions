@@ -57,4 +57,32 @@ app.use((req, res) => {
   res.status(404).json({ error: 'Route not found' });
 });
 
+// Global error handler. Express recognises it by its four parameters, so
+// `next` must stay even though it is only used for the headersSent case.
+// Never sends the stack or the error message to the client.
+app.use((err, req, res, next) => {
+  // A response already started streaming: let Express close the connection
+  if (res.headersSent) return next(err);
+
+  // Malformed JSON body, rejected by express.json() before any route runs
+  if (err.type === 'entity.parse.failed') {
+    logger.warn(`Invalid JSON body on ${req.method} ${req.originalUrl}`);
+    return res.status(400).json({ error: 'Invalid JSON' });
+  }
+
+  // Other client errors carry a 4xx status, e.g. body-parser's 413 for a
+  // body over the size limit. Keep the status, but send a generic message.
+  if (err.status >= 400 && err.status < 500) {
+    logger.warn(
+      `Client error ${err.status} on ${req.method} ${req.originalUrl}: ${err.message}`
+    );
+    return res.status(err.status).json({
+      error: err.status === 413 ? 'Payload too large' : 'Bad request',
+    });
+  }
+
+  logger.error(`Unhandled error on ${req.method} ${req.originalUrl}`, err);
+  res.status(500).json({ error: 'Internal server error' });
+});
+
 export default app;

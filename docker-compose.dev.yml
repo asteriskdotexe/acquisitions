@@ -1,3 +1,4 @@
+name: acquisitions-dev
 services:
   # Neon Local: a local proxy that creates a real, ephemeral Neon branch for
   # this dev session and speaks Postgres on :5432. The branch is deleted

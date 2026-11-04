@@ -1,3 +1,4 @@
+name: acquisitions-prod
 services:
   app:
     build:
