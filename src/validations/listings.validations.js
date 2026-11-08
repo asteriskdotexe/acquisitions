@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { listingStatuses } from '#models/listing.model.js';
+import { priceSchema } from '#validations/common.validations.js';
 
 // Validates the :id in the URL, same idea as userIdSchema.
 export const listingIdSchema = z.object({
@@ -9,14 +10,7 @@ export const listingIdSchema = z.object({
     .positive('Listing id must be greater than 0'),
 });
 
-// numeric(12,2) holds up to 9999999999.99. The price is turned into a
-// string with exactly 2 decimals, which is how Postgres numeric round-trips.
-const askingPriceSchema = z.coerce
-  .number({ error: 'Asking price must be a number' })
-  .positive('Asking price must be greater than 0')
-  .max(9999999999.99, 'Asking price must be at most 9999999999.99')
-  .multipleOf(0.01, 'Asking price can have at most 2 decimal places')
-  .transform(price => price.toFixed(2));
+const askingPriceSchema = priceSchema('Asking price');
 
 // New listings always start as active, so status is not accepted here.
 export const createListingSchema = z.object({

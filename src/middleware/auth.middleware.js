@@ -37,3 +37,18 @@ export const attachUser = (req, res, next) => {
 
   next();
 };
+
+// Use after authenticateToken: lets the request through only when the
+// signed-in user's role is one of the given roles.
+export const requireRole = (...roles) => {
+  return (req, res, next) => {
+    if (!roles.includes(req.user?.role)) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: 'Insufficient permissions',
+      });
+    }
+
+    next();
+  };
+};
