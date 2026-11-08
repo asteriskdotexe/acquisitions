@@ -35,31 +35,34 @@ This app connects to Postgres through [Neon](https://neon.tech). Locally, it tal
    ```
    NEON_API_KEY=your_api_key_here
    NEON_PROJECT_ID=your_project_id_here
-   NEON_PARENT_BRANCH_ID=your_main_branch_id_here
+   PARENT_BRANCH_ID=your_staging_branch_id_here
    ARCJET_KEY=your_arcjet_key_here
    ```
 
    You don't need to set `DATABASE_URL` here, `docker-compose.dev.yml` points it at the Neon Local container automatically.
 
+   Also create `.env` with `DATABASE_URL` set to your **staging** branch's connection string. It is only used on your host, to run migrations in step 2.
+
 2. Start everything:
 
    ```bash
-   docker compose -f docker-compose.dev.yml up --build
+   npm run dev:docker
    ```
 
-   This starts two containers:
-   - **`neon-local`** — connects to your Neon project using the API key, creates a brand-new ephemeral branch off `NEON_PARENT_BRANCH_ID`, and exposes a Postgres endpoint on `localhost:5432`.
+   This runs `scripts/dev-setup.sh`. It first applies migrations **on your host** with `npm run db:migrate`, against the staging branch in `.env`, and then runs `docker compose -f docker-compose.dev.yml up --build`, which starts two containers:
+   - **`neon-local`** — connects to your Neon project using the API key, creates a brand-new ephemeral branch off `PARENT_BRANCH_ID` (staging, so it already has the schema that was just migrated), and exposes a Postgres endpoint on `localhost:5432`.
    - **`app`** — your Express app, built from the Dockerfile's `development` stage, running `npm run dev` (`node --watch`) so code changes under `src/` reload automatically. Your local `src/` folder is bind-mounted in, so you edit on your host and the container picks it up.
 
 3. The app is now at **http://localhost:3000**. The database is a fresh, isolated Neon branch, nothing you do to it touches your real data.
 
-4. Run migrations against it, same commands as usual, just from inside the running container:
+4. To change the schema, generate a migration on your host and restart:
 
    ```bash
-   docker compose -f docker-compose.dev.yml exec app npm run db:migrate
+   npm run db:generate
+   npm run dev:docker
    ```
 
-   (Or run `npm run db:generate` / `npm run db:studio` the same way.)
+   `dev-setup.sh` migrates staging first and Neon Local then branches from it, so the new dev branch includes the change. Migrations are not run inside the container, and they never target the short-lived dev branch.
 
 ### Stopping
 
@@ -69,9 +72,11 @@ docker compose -f docker-compose.dev.yml down
 
 Because `DELETE_BRANCH` defaults to `true`, the ephemeral Neon branch created for this session is deleted automatically when `neon-local` stops. Next time you run `up`, you get a clean branch again. If you want to keep a branch around between runs (e.g. to debug something), uncomment `DELETE_BRANCH: "false"` in `docker-compose.dev.yml`.
 
-### Why the database config has a dev-only branch
+### Why the database client has a dev-only branch
 
-`src/config/database.js` and `drizzle.config.js` both check `NODE_ENV`. In development, they add extra settings (`neonConfig.fetchEndpoint`, relaxed SSL for `drizzle-kit`) needed specifically to talk to the Neon Local proxy, which only speaks HTTP and uses a self-signed certificate. In production, none of that runs, the Neon serverless driver connects to Neon Cloud exactly as it would by default.
+`src/config/database.js` checks `NODE_ENV`. In development, it points the Neon serverless driver at the Neon Local proxy (`neonConfig.fetchEndpoint` and related settings), because the proxy only speaks HTTP. In production none of that runs, and the driver connects to Neon Cloud exactly as it would by default.
+
+Migrations don't need any of this. `drizzle-kit` reads the root `drizzle.config.js`, which loads `.env` with `dotenv/config` and passes `DATABASE_URL` straight through. It has no `NODE_ENV` checks and no Neon Local settings, because migrations always run on your host against a Neon Cloud branch: staging in development, production in `prod-setup.sh`. A `DATABASE_URL` already set in the environment takes precedence over `.env`, which is how `prod-setup.sh` points it at production.
 
 ---
 
@@ -85,25 +90,24 @@ Because `DELETE_BRANCH` defaults to `true`, the ephemeral Neon branch created fo
    NODE_ENV=production
    DATABASE_URL=postgresql://<user>:<password>@<endpoint>.aws.neon.tech/<dbname>?sslmode=require&channel_binding=require
    ARCJET_KEY=your_arcjet_key_here
+   JWT_SECRET=a_long_random_secret_here
    ```
 
    Get the connection string from your Neon project's **Connect** dialog in the console. This should be your actual production branch, not a Neon Local proxy, there is no proxy involved at all in this file.
 
-2. Build and run:
+   `JWT_SECRET` is required: with `NODE_ENV=production`, the app refuses to start without it.
+
+2. Migrate and start:
 
    ```bash
-   docker compose -f docker-compose.prod.yml up --build -d
+   npm run prod:docker
    ```
 
-   This builds the Dockerfile's `production` target: a minimal image with only production dependencies, running as a non-root user, with a `/health` healthcheck wired in.
-
-3. Run migrations against your real database before/during deploy, however your release process does this, for example:
-
-   ```bash
-   docker compose -f docker-compose.prod.yml exec app npm run db:migrate
-   ```
-
-   Consider running migrations as a separate release step (not automatically on every container start), so a bad deploy doesn't also run against prod unexpectedly.
+   This runs `scripts/prod-setup.sh`, which:
+   1. Checks that `.env.production` exists and that Docker is running.
+   2. Reads `DATABASE_URL` from `.env.production` and runs `npm run db:migrate` on your host against the **production** database, before the new code starts. If the migration fails, the script stops and the app is not started.
+   3. Builds and starts the container with `docker compose -f docker-compose.prod.yml up --build -d`. This uses the Dockerfile's `production` target: a minimal image with only production dependencies, running as a non-root user, with a `/health` healthcheck wired in.
+   4. Waits 5 seconds and checks that the `acquisitions-app-prod` container is still running. If it isn't, for example because `JWT_SECRET` is missing, it prints the last 20 log lines and exits with an error.
 
 ### Stopping
 

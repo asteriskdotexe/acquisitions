@@ -42,7 +42,6 @@ services:
       # container so your host's installed packages never clash with it.
       - ./src:/app/src
       - ./package.json:/app/package.json
-      - ./drizzle.config.js:/app/drizzle.config.js
       - /app/node_modules
     depends_on:
       neon-local:

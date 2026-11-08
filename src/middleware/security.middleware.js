@@ -69,7 +69,9 @@ const securityMiddleware = async (req, res, next) => {
         path: req.path,
       });
 
-      return res.status(403).json({ error: 'Forbidden', message });
+      res.set('Retry-After', String(decision.reason.reset ?? 60));
+
+      return res.status(429).json({ error: 'Too Many Requests', message });
     }
 
     next();
