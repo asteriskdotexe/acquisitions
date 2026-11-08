@@ -36,8 +36,26 @@ const { default: app } = await import('#src/app.js');
 const { default: aj } = await import('#config/arcjet.js');
 const { slidingWindow } = await import('@arcjet/node');
 const { jwttoken } = await import('#utils/jwt.js');
+const listingsService = await import('#services/listings.services.js');
 
 const authCookie = user => `token=${jwttoken.sign(user)}`;
+
+// A denied Arcjet decision for one reason: 'bot', 'shield' or 'rateLimit'
+const deniedDecision = kind => ({
+  isDenied: () => true,
+  reason: {
+    isBot: () => kind === 'bot',
+    isShield: () => kind === 'shield',
+    isRateLimit: () => kind === 'rateLimit',
+  },
+});
+
+// Makes the next request's Arcjet check return a denied decision
+const denyNextRequest = kind => {
+  aj.withRule.mockReturnValueOnce({
+    protect: jest.fn(async () => deniedDecision(kind)),
+  });
+};
 
 // Regression: securityMiddleware runs globally, before the routes'
 // authenticateToken, so it used to see no req.user and rate limited every
@@ -93,5 +111,50 @@ describe('role-based rate limiting', () => {
       .expect(401);
 
     expect(aj.withRule).toHaveBeenCalledWith('guest-rate-limit');
+  });
+});
+
+describe('blocked requests', () => {
+  it('returns 429 with Retry-After when the rate limit is exceeded', async () => {
+    denyNextRequest('rateLimit');
+
+    const response = await request(app)
+      .get('/api/listings')
+      .set(
+        'Cookie',
+        authCookie({ id: 1, email: 'u@example.com', role: 'user' })
+      )
+      .expect(429);
+
+    expect(response.headers['retry-after']).toBe('60');
+    expect(response.body).toEqual({
+      error: 'Too Many Requests',
+      message: 'User request limit exceeded (10 per minute), slow down.',
+    });
+    expect(listingsService.getListings).not.toHaveBeenCalled();
+  });
+
+  it('returns 403 without Retry-After for a bot', async () => {
+    denyNextRequest('bot');
+
+    const response = await request(app).get('/api/listings').expect(403);
+
+    expect(response.headers['retry-after']).toBeUndefined();
+    expect(response.body).toEqual({
+      error: 'Forbidden',
+      message: 'Automated requests are not allowed',
+    });
+  });
+
+  it('returns 403 without Retry-After for a shield block', async () => {
+    denyNextRequest('shield');
+
+    const response = await request(app).get('/api/listings').expect(403);
+
+    expect(response.headers['retry-after']).toBeUndefined();
+    expect(response.body).toEqual({
+      error: 'Forbidden',
+      message: 'Request blocked by security policy',
+    });
   });
 });
