@@ -1,0 +1,33 @@
+#!/bin/bash
+# Runs once, as root, on the server's first boot (via cloud-init).
+# Output is logged to /var/log/cloud-init-output.log on the server.
+set -euo pipefail
+
+# 1. Install and start Docker
+dnf install -y docker
+systemctl enable --now docker
+
+# 2. Fetch the app's secrets from Parameter Store into a root-only env file
+ENV_FILE=/etc/acquisitions.env
+: > "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
+aws ssm get-parameters-by-path \
+  --region "${region}" \
+  --path "${param_path}" \
+  --with-decryption \
+  --query "Parameters[].[Name,Value]" \
+  --output text |
+while IFS=$'\t' read -r name value; do
+  echo "$${name##*/}=$${value}" >> "$ENV_FILE"
+done
+
+# 3. Run the app container
+docker run -d \
+  --name acquisitions \
+  --restart unless-stopped \
+  -p 80:3000 \
+  --env-file "$ENV_FILE" \
+  -e NODE_ENV=production \
+  -e PORT=3000 \
+  "${app_image}"
