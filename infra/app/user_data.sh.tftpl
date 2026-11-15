@@ -26,6 +26,9 @@ done
 docker run -d \
   --name acquisitions \
   --restart unless-stopped \
+  --log-driver awslogs \
+  --log-opt awslogs-region="${region}" \
+  --log-opt awslogs-group="${log_group}" \
   -p 80:3000 \
   --env-file "$ENV_FILE" \
   -e NODE_ENV=production \

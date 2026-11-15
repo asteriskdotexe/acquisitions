@@ -173,8 +173,14 @@ resource "aws_instance" "app" {
     region = data.aws_region.current.region
     param_path = "/acquisitions/prod"
     app_image = var.app_image
+    log_group = aws_cloudwatch_log_group.app.name
   })
   user_data_replace_on_change = true
+  
+  depends_on = [ 
+    aws_iam_role_policy.read_app_params,
+    aws_iam_role_policy.write_app_logs,
+   ]
 
   metadata_options {
     http_tokens = "required"
