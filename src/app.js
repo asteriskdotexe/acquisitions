@@ -19,6 +19,16 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 
+// Health check first: Docker calls it every 30 seconds from inside the
+// container, so it skips request logging and the rate limit.
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 app.use(
   morgan('combined', {
     stream: { write: message => logger.info(message.trim()) },
@@ -34,14 +44,6 @@ app.use(securityMiddleware);
 app.get('/', (req, res) => {
   logger.info('Hello from Acquisitions');
   res.status(200).send('Hello from Acquisitions!');
-});
-
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-  });
 });
 
 app.get('/api', (req, res) => {
