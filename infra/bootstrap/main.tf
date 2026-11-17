@@ -58,3 +58,86 @@ resource "aws_s3_bucket_public_access_block" "tfstate" {
 output "state_bucket_name" {
   value = aws_s3_bucket.tfstate.bucket
 }
+
+resource "aws_iam_openid_connect_provider" "github" {
+  url = "https://token.actions.githubusercontent.com"
+  client_id_list = [ "sts.amazonaws.com" ]
+}
+
+data "aws_iam_policy_document" "github_deploy_assume" {
+  statement {
+    actions = [ "sts:AssumeRoleWithWebIdentity" ]
+
+    principals {
+      type = "Federated"
+      identifiers = [ aws_iam_openid_connect_provider.github.arn ]
+    }
+
+    condition {
+      test = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values = [ "sts.amazonaws.com" ]
+    }
+
+    condition {
+      test = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values = [ "repo:asteriskdotexe/acquisitions:environment:production" ]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_deploy" {
+  name = "acquisitions-github-deploy"
+  assume_role_policy = data.aws_iam_policy_document.github_deploy_assume.json
+}
+
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+locals {
+  region = data.aws_region.current.region
+  account_id = data.aws_caller_identity.current.account_id
+}
+
+data "aws_iam_policy_document" "github_deploy" {
+  statement {
+    sid = "FindAppInstance"
+    actions = [ "ec2:DescribeInstance" ]
+    resources = [ "*" ]
+  }
+
+  statement {
+    sid = "UseRunShellScript"
+    actions = [ "ssm:SendCommand" ]
+    resources = [ "arn:aws:ssm:${local.region}::document/AWS-RunSheellScript" ]
+  }
+
+  statement {
+    sid = "OnlyOnAppInstance"
+    actions = [ "ssm:SendCommand" ]
+    resources = [ "arn:aws:ec2:${local.region}:${local.account_id}:instance/*" ]
+
+    condition {
+      test = "StringEquals"
+      variable = "ssm:resourceTag/Name"
+      values = [ "acquisitions-app" ]
+    }
+  }
+
+  statement {
+    sid = "ReadCommandResult"
+    actions = [ "ssm:GetCommandInvocation" ]
+    resources = [ "*" ]
+  }
+}
+
+resource "aws_iam_role_policy" "github_deploy" {
+  name = "deploy-app"
+  role = aws_iam_role.github_deploy.id
+  policy = data.aws_iam_policy_document.github_deploy.json
+}
+
+output "github_deploy_role_arn" {
+  value = aws_iam_role.github_deploy.arn
+}
