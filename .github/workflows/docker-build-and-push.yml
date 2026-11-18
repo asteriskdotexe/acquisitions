@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: Build and Deploy
 
 on:
   push:
@@ -8,9 +8,22 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
 jobs:
+  tests:
+    name: Tests
+    uses: ./.github/workflows/tests.yml
+
+  lint:
+    name: Lint and Format
+    uses: ./.github/workflows/lint-and-format.yml
+
   docker:
     name: Build and push production image
+    needs: [tests, lint]
     runs-on: ubuntu-latest
 
     steps:
@@ -81,3 +94,81 @@ jobs:
             echo ""
             echo "Pull it with: \`docker pull $(echo "$TAGS" | grep ':latest$' | head -n 1)\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+  deploy:
+    name: Deploy to EC2
+    needs: docker
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ap-south-1
+      IMAGE_REPO: shubhamsingh7913/acquisitions
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Find the app server
+        id: server
+        run: |
+          read -r INSTANCE_ID PUBLIC_DNS < <(aws ec2 describe-instances \
+            --filters "Name=tag:Name,Values=acquisitions-app" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].[InstanceId,PublicDnsName]" \
+            --output text)
+
+          if [ -z "$INSTANCE_ID" ] || [ "$INSTANCE_ID" = "None" ]; then
+            echo "::error title=No server running::No running instance tagged acquisitions-app. Run terraform apply in infra/app first."
+            exit 1
+          fi
+
+          echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
+          echo "public_dns=$PUBLIC_DNS" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy the new image
+        env:
+          INSTANCE_ID: ${{ steps.server.outputs.instance_id }}
+        run: |
+          IMAGE="$IMAGE_REPO:sha-${GITHUB_SHA::7}"
+          echo "Deploying $IMAGE to $INSTANCE_ID"
+
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name AWS-RunShellScript \
+            --comment "Deploy sha-${GITHUB_SHA::7}" \
+            --parameters "commands=/usr/local/bin/deploy-app $IMAGE" \
+            --query "Command.CommandId" \
+            --output text)
+
+          # Wait for the command to finish. The waiter exits with an error if
+          # the command fails, so `|| true` lets us print the output first.
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
+
+          invocation() {
+            aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query "$1" --output text
+          }
+
+          echo "--- Output from the server ---"
+          invocation StandardOutputContent
+          invocation StandardErrorContent
+
+          STATUS=$(invocation Status)
+          if [ "$STATUS" != "Success" ]; then
+            echo "::error title=Deploy failed::The deploy script finished with status $STATUS. See the output above."
+            exit 1
+          fi
+
+      - name: Check the app is healthy
+        env:
+          PUBLIC_DNS: ${{ steps.server.outputs.public_dns }}
+        run: |
+          curl --fail --silent --show-error \
+            --retry 10 --retry-delay 3 --retry-all-errors \
+            "http://$PUBLIC_DNS/health"
+          echo ""
+          echo "Deployed sha-${GITHUB_SHA::7} to http://$PUBLIC_DNS" >> "$GITHUB_STEP_SUMMARY"

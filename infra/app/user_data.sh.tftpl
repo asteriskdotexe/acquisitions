@@ -3,15 +3,22 @@
 # Output is logged to /var/log/cloud-init-output.log on the server.
 set -euo pipefail
 
-# 1. Install and start Docker
 dnf install -y docker
 systemctl enable --now docker
 
-# 2. Fetch the app's secrets from Parameter Store into a root-only env file
+# Installs the deploy script. First boot runs it below, and the GitHub
+# Actions deploy job runs it again (through SSM Run Command) with a new image.
+cat > /usr/local/bin/deploy-app <<'SCRIPT'
+#!/bin/bash
+# Usage: deploy-app <image>
+set -euo pipefail
+
+IMAGE="$1"
 ENV_FILE=/etc/acquisitions.env
+
+# Fetch the secrets on every deploy, so a changed parameter takes effect
 : > "$ENV_FILE"
 chmod 600 "$ENV_FILE"
-
 aws ssm get-parameters-by-path \
   --region "${region}" \
   --path "${param_path}" \
@@ -22,7 +29,10 @@ while IFS=$'\t' read -r name value; do
   echo "$${name##*/}=$${value}" >> "$ENV_FILE"
 done
 
-# 3. Run the app container
+# Pull first: if it fails, the script stops and the old container keeps running
+docker pull "$IMAGE"
+
+docker rm -f acquisitions 2>/dev/null || true
 docker run -d \
   --name acquisitions \
   --restart unless-stopped \
@@ -33,4 +43,10 @@ docker run -d \
   --env-file "$ENV_FILE" \
   -e NODE_ENV=production \
   -e PORT=3000 \
-  "${app_image}"
+  "$IMAGE"
+
+echo "Deployed $IMAGE"
+SCRIPT
+chmod +x /usr/local/bin/deploy-app
+
+/usr/local/bin/deploy-app "${app_image}"
