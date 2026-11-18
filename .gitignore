@@ -7,3 +7,10 @@ logs
 *.log
 .neon_local/
 coverage/
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+crash.log
