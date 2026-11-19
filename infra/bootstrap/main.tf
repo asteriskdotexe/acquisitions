@@ -82,7 +82,7 @@ data "aws_iam_policy_document" "github_deploy_assume" {
     condition {
       test = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [ "repo:asteriskdotexe/acquisitions:environment:production" ]
+      values = [ "repo:asteriskdotexe@75488681/acquisitions@1359080553:environment:production" ]
     }
   }
 }
@@ -103,14 +103,14 @@ locals {
 data "aws_iam_policy_document" "github_deploy" {
   statement {
     sid = "FindAppInstance"
-    actions = [ "ec2:DescribeInstance" ]
+    actions = [ "ec2:DescribeInstances" ]
     resources = [ "*" ]
   }
 
   statement {
     sid = "UseRunShellScript"
     actions = [ "ssm:SendCommand" ]
-    resources = [ "arn:aws:ssm:${local.region}::document/AWS-RunSheellScript" ]
+    resources = [ "arn:aws:ssm:${local.region}::document/AWS-RunShellScript" ]
   }
 
   statement {

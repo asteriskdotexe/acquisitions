@@ -197,20 +197,27 @@ More detail on the Docker setup is in [README.docker.md](README.docker.md).
 
 ## CI/CD
 
-| Workflow                                            | Runs on                                          | What it does                                                                       |
-| --------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------- |
-| Lint and Format (`lint-and-format.yml`)             | Pushes and pull requests to `main` and `staging` | Runs ESLint and the Prettier check, and adds annotations for problems              |
-| Tests (`tests.yml`)                                 | Pushes and pull requests to `main` and `staging` | Runs Jest with coverage, uploads the coverage report and adds a summary to the run |
-| Docker Build and Push (`docker-build-and-push.yml`) | Pushes to `main`, or a manual run                | Builds the production image for `linux/amd64` and pushes it to Docker Hub          |
+| Workflow                                  | Runs on                                                                                    | What it does                                                                                       |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Lint and Format (`lint-and-format.yml`)   | Pull requests to `main` and `staging`, pushes to `staging`, and called by Build and Deploy | Runs ESLint and the Prettier check, and adds annotations for problems                              |
+| Tests (`tests.yml`)                       | Pull requests to `main` and `staging`, pushes to `staging`, and called by Build and Deploy | Runs Jest with coverage, uploads the coverage report and adds a summary to the run                 |
+| Build and Deploy (`build-and-deploy.yml`) | Pushes to `main`, or a manual run                                                          | Runs tests and lint, builds and pushes the production image, then deploys it to EC2 after approval |
 
 The usual flow:
 
 1. Work on a feature branch, for example `feature/deals`.
 2. Open a pull request into `main` (or `staging`). The Lint and Format and Tests workflows run on the pull request.
 3. When the checks pass, merge it.
-4. The merge to `main` triggers Docker Build and Push. It publishes `<DOCKER_USERNAME>/acquisitions` tagged `latest`, `main`, the short commit SHA, and `prod-<timestamp>`.
+4. The merge to `main` triggers Build and Deploy:
+   1. Tests and lint run again on the merged code.
+   2. If both pass, the image is built for `linux/amd64` and pushed as `<DOCKER_USERNAME>/acquisitions`, tagged `latest`, `main`, `sha-<short commit SHA>` and `prod-<timestamp>`.
+   3. The deploy job waits for approval in the `production` environment.
+   4. Once approved, it assumes an AWS role through OIDC, runs `deploy-app` on the EC2 instance through SSM Run Command with the `sha-` image, and checks `/health`.
 
-The Docker workflow needs the repository secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`. Use a Docker Hub access token as the password.
+The workflow needs:
+
+- Repository secrets `DOCKER_USERNAME` and `DOCKER_PASSWORD`. Use a Docker Hub access token as the password.
+- A `production` environment with a required reviewer, deployments limited to `main`, and the variable `AWS_DEPLOY_ROLE_ARN` set to the role created in `infra/bootstrap`.
 
 ## Testing
 
