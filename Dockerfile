@@ -51,7 +51,7 @@ CMD ["npm", "run", "dev"]
 
 #############################################
 # production: minimal, non-root runtime image
-# This is the target docker-compose.prod.yml builds and runs.
+# This is the image the deploy pipeline runs on EC2.
 #############################################
 FROM base AS production
 

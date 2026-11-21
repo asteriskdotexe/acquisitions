@@ -130,6 +130,30 @@ jobs:
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
           echo "public_dns=$PUBLIC_DNS" >> "$GITHUB_OUTPUT"
 
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js 22.x
+        uses: actions/setup-node@v5
+        with:
+          node-version: 22.x
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run database migrations
+        run: |
+          DATABASE_URL=$(aws ssm get-parameter \
+            --name /acquisitions/prod/DATABASE_URL \
+            --with-decryption \
+            --query Parameter.Value \
+            --output text)
+          echo "::add-mask::$DATABASE_URL"
+          export DATABASE_URL
+
+          npm run db:migrate
+
       - name: Deploy the new image
         env:
           INSTANCE_ID: ${{ steps.server.outputs.instance_id }}

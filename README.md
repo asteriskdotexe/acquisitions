@@ -6,7 +6,7 @@ A REST API for an acquisitions marketplace. Users list businesses for sale, othe
 
 - **Docker multi-stage build:** one Dockerfile with a `development` target (hot reload) and a `production` target that has only production dependencies, runs as a non-root user and has a `/health` health check.
 - **CI/CD pipeline:** every pull request to `main` or `staging` runs ESLint, Prettier and the Jest suite. Merging to `main` builds the production image and publishes it to Docker Hub, tagged `latest`, with the commit SHA and with a timestamp.
-- **Neon environments:** a production database, a long-lived staging branch, and short-lived development branches created by Neon Local. Migrations are generated with drizzle-kit, applied to staging during development, and applied to production by `prod-setup.sh` before the new container starts.
+- **Neon environments:** a production database, a long-lived staging branch, and short-lived development branches created by Neon Local. Migrations are generated with drizzle-kit, applied to staging during development, and applied to production by the deploy pipeline before the new container starts.
 - **Secrets kept out of the repo:** env files are git-ignored and `.env.example` holds placeholders only. CI reads Docker Hub credentials from GitHub secrets, and the app refuses to start in production without `JWT_SECRET`.
 - **Tests with no external dependencies:** the database and Arcjet are mocked, so the suites run in CI with no database, network access or real credentials.
 - **Coming next:** deploying to AWS, with the infrastructure defined in Terraform.
@@ -115,22 +115,22 @@ src/
   utils/          JWT, cookie and validation-error helpers
 drizzle/          generated SQL migrations
 tests/            Jest and Supertest suites
-scripts/          dev-setup.sh and prod-setup.sh
+scripts/          dev-setup.sh
 ```
 
 ## Environments and database
 
-| Environment | Database                                                       | Used by                                                                                    |
-| ----------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| Production  | The main Neon database                                         | `prod-setup.sh` and `docker-compose.prod.yml`, through `DATABASE_URL` in `.env.production` |
-| Staging     | A long-lived Neon branch                                       | Your host machine, through `DATABASE_URL` in `.env`; also the parent of the dev branches   |
-| Development | A short-lived Neon branch that Neon Local creates from staging | The `app` container in `docker-compose.dev.yml`                                            |
+| Environment | Database                                                       | Used by                                                                                                                 |
+| ----------- | -------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Production  | The main Neon database                                         | The deploy job in `build-and-deploy.yml` (migrations) and the app on EC2, through `DATABASE_URL` in SSM Parameter Store |
+| Staging     | A long-lived Neon branch                                       | Your host machine, through `DATABASE_URL` in `.env`; also the parent of the dev branches                                |
+| Development | A short-lived Neon branch that Neon Local creates from staging | The `app` container in `docker-compose.dev.yml`                                                                         |
 
 How migrations flow:
 
 1. Change a model in `src/models/`, then run `npm run db:generate` to create a SQL migration in `drizzle/`.
 2. **Dev:** `npm run dev:docker` runs `npm run db:migrate` against **staging** (the `DATABASE_URL` in `.env`) before starting the containers. Neon Local then creates a fresh branch from staging, so the dev database starts with the latest schema. That branch is deleted when the containers stop.
-3. **Production:** `npm run prod:docker` runs `scripts/prod-setup.sh`. The script reads `DATABASE_URL` from `.env.production` and migrates the **production** database first. If the migration fails, the app is not started. If it succeeds, it starts the production container and checks that the container stayed up.
+3. **Production:** the deploy job in `build-and-deploy.yml` reads `DATABASE_URL` from SSM Parameter Store and runs `npm run db:migrate` against the **production** database before switching the container. If the migration fails, the job stops and the old version keeps running. Migrations must stay backward compatible, because the old code runs against the new schema for a few seconds, and a rollback doesn't undo them.
 
 More detail on the Docker setup is in [README.docker.md](README.docker.md).
 
@@ -156,14 +156,12 @@ More detail on the Docker setup is in [README.docker.md](README.docker.md).
    ```bash
    cp .env.example .env
    cp .env.example .env.development
-   cp .env.example .env.production
    ```
 
    | File               | Set these                                                                                                                                                                                                |
    | ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
    | `.env`             | `DATABASE_URL` (the staging branch's connection string), `ARCJET_KEY`                                                                                                                                    |
    | `.env.development` | `ARCJET_KEY`, plus the Neon Local settings `NEON_API_KEY`, `NEON_PROJECT_ID` and `PARENT_BRANCH_ID` (the staging branch's id). `DATABASE_URL` isn't needed; Docker Compose points the app at Neon Local. |
-   | `.env.production`  | `DATABASE_URL` (production), `JWT_SECRET` (a long random string), `ARCJET_KEY`                                                                                                                           |
 
    `JWT_SECRET` is required when `NODE_ENV=production`, and the app refuses to start without it. In development and tests, a built-in dev-only secret is used and a warning is logged.
 
@@ -212,7 +210,7 @@ The usual flow:
    1. Tests and lint run again on the merged code.
    2. If both pass, the image is built for `linux/amd64` and pushed as `<DOCKER_USERNAME>/acquisitions`, tagged `latest`, `main`, `sha-<short commit SHA>` and `prod-<timestamp>`.
    3. The deploy job waits for approval in the `production` environment.
-   4. Once approved, it assumes an AWS role through OIDC, runs `deploy-app` on the EC2 instance through SSM Run Command with the `sha-` image, and checks `/health`.
+   4. Once approved, it assumes an AWS role through OIDC, runs `npm run db:migrate` against the production database, then runs `deploy-app` on the EC2 instance through SSM Run Command with the `sha-` image, and checks `/health`.
 
 The workflow needs:
 
