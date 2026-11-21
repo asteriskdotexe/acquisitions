@@ -1,16 +1,16 @@
 # Running Acquisitions with Docker + Neon
 
-This app connects to Postgres through [Neon](https://neon.tech). Locally, it talks to **Neon Local**, a Docker proxy that spins up a real, ephemeral Neon branch for you. In production, it talks straight to your **Neon Cloud** database. Nothing about the application code changes between the two, only which `DATABASE_URL` and Docker Compose file you use.
+This app connects to Postgres through [Neon](https://neon.tech). Locally, it talks to **Neon Local**, a Docker proxy that spins up a real, ephemeral Neon branch for you. In production, it talks straight to your **Neon Cloud** database. Nothing about the application code changes between the two, only which `DATABASE_URL` it gets.
 
 ## How the two environments differ
 
-|                   | Development                                                                                          | Production                                                                               |
-| ----------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Compose file      | `docker-compose.dev.yml`                                                                             | `docker-compose.prod.yml`                                                                |
-| Dockerfile target | `development` (hot reload via `node --watch`)                                                        | `production` (minimal image, non-root user)                                              |
-| Database          | Neon Local proxy container, creates/destroys an ephemeral branch each run                            | Your real Neon Cloud database, connected directly                                        |
-| `DATABASE_URL`    | Fixed local value, hardcoded in `docker-compose.dev.yml` (`postgres://neon:npg@neon-local:5432/...`) | Your actual Neon connection string, supplied via `.env.production` / your secret manager |
-| Env file          | `.env.development`                                                                                   | `.env.production`                                                                        |
+|                   | Development                                                                                          | Production                                                                          |
+| ----------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| How it runs       | `docker-compose.dev.yml`                                                                             | `docker run` on EC2, started by `deploy-app` (see [README.md](README.md#cicd))      |
+| Dockerfile target | `development` (hot reload via `node --watch`)                                                        | `production` (minimal image, non-root user)                                         |
+| Database          | Neon Local proxy container, creates/destroys an ephemeral branch each run                            | Your real Neon Cloud database, connected directly                                   |
+| `DATABASE_URL`    | Fixed local value, hardcoded in `docker-compose.dev.yml` (`postgres://neon:npg@neon-local:5432/...`) | Your Neon connection string, stored in SSM Parameter Store                          |
+| Env file          | `.env.development`                                                                                   | `/etc/acquisitions.env` on the server, written by `deploy-app` from Parameter Store |
 
 ---
 
@@ -76,46 +76,17 @@ Because `DELETE_BRANCH` defaults to `true`, the ephemeral Neon branch created fo
 
 `src/config/database.js` checks `NODE_ENV`. In development, it points the Neon serverless driver at the Neon Local proxy (`neonConfig.fetchEndpoint` and related settings), because the proxy only speaks HTTP. In production none of that runs, and the driver connects to Neon Cloud exactly as it would by default.
 
-Migrations don't need any of this. `drizzle-kit` reads the root `drizzle.config.js`, which loads `.env` with `dotenv/config` and passes `DATABASE_URL` straight through. It has no `NODE_ENV` checks and no Neon Local settings, because migrations always run on your host against a Neon Cloud branch: staging in development, production in `prod-setup.sh`. A `DATABASE_URL` already set in the environment takes precedence over `.env`, which is how `prod-setup.sh` points it at production.
+Migrations don't need any of this. `drizzle-kit` reads the root `drizzle.config.js`, which loads `.env` with `dotenv/config` and passes `DATABASE_URL` straight through. It has no `NODE_ENV` checks and no Neon Local settings, because migrations always run against a Neon Cloud branch: staging from your host in development, production from the deploy job in CI. A `DATABASE_URL` already set in the environment takes precedence over `.env`, which is how the deploy job points it at production.
 
 ---
 
-## 2. Production: deploying with Neon Cloud
+## 2. Production: deployed by the pipeline
 
-### Setup
+Production isn't started from your machine. Merging to `main` runs the Build and Deploy workflow, which tests and builds the image, waits for approval, migrates the production database and then runs the new image on EC2. The steps are in the [CI/CD section of README.md](README.md#cicd).
 
-1. Fill in `.env.production` with your real values, or better, inject these as environment variables through your deployment platform (CI/CD secrets, Kubernetes secrets, your host's dashboard) rather than keeping a filled-in file on disk:
+The production values (`DATABASE_URL`, `JWT_SECRET`, `ARCJET_KEY`) live in SSM Parameter Store under `/acquisitions/prod`, never in a file in the repo or on your machine. On every deploy, the `deploy-app` script on the server reads them into `/etc/acquisitions.env` (readable only by root) and starts the container with `--env-file`.
 
-   ```
-   NODE_ENV=production
-   DATABASE_URL=postgresql://<user>:<password>@<endpoint>.aws.neon.tech/<dbname>?sslmode=require&channel_binding=require
-   ARCJET_KEY=your_arcjet_key_here
-   JWT_SECRET=a_long_random_secret_here
-   ```
-
-   Get the connection string from your Neon project's **Connect** dialog in the console. This should be your actual production branch, not a Neon Local proxy, there is no proxy involved at all in this file.
-
-   `JWT_SECRET` is required: with `NODE_ENV=production`, the app refuses to start without it.
-
-2. Migrate and start:
-
-   ```bash
-   npm run prod:docker
-   ```
-
-   This runs `scripts/prod-setup.sh`, which:
-   1. Checks that `.env.production` exists and that Docker is running.
-   2. Reads `DATABASE_URL` from `.env.production` and runs `npm run db:migrate` on your host against the **production** database, before the new code starts. If the migration fails, the script stops and the app is not started.
-   3. Builds and starts the container with `docker compose -f docker-compose.prod.yml up --build -d`. This uses the Dockerfile's `production` target: a minimal image with only production dependencies, running as a non-root user, with a `/health` healthcheck wired in.
-   4. Waits 5 seconds and checks that the `acquisitions-app-prod` container is still running. If it isn't, for example because `JWT_SECRET` is missing, it prints the last 20 log lines and exits with an error.
-
-### Stopping
-
-```bash
-docker compose -f docker-compose.prod.yml down
-```
-
-This only stops your app container. Your Neon Cloud database is unaffected, since it isn't something this Compose file manages, it already existed before and keeps existing after.
+`JWT_SECRET` is required: with `NODE_ENV=production`, the app refuses to start without it.
 
 ---
 
@@ -124,22 +95,20 @@ This only stops your app container. Your Neon Cloud database is unaffected, sinc
 Nothing in the application code hardcodes which database to use, it always just reads `process.env.DATABASE_URL`. What changes is **where that value comes from**:
 
 - **Dev:** `docker-compose.dev.yml` sets `DATABASE_URL` directly in its `environment:` block, pointing at the `neon-local` service by its Compose service name. This value is fixed and not secret, Neon Local accepts that `neon:npg` login for any local session.
-- **Prod:** `docker-compose.prod.yml` does **not** set `DATABASE_URL` itself, it's pulled in via `env_file: .env.production`, which should be populated from your actual Neon Cloud credentials (ideally injected by a secret manager rather than a plaintext file sitting in your deploy environment).
+- **Prod:** `DATABASE_URL` comes from SSM Parameter Store. `deploy-app` writes it into an env file on the server, and the deploy job fetches it separately to run migrations.
 
-This is also why `.env.development` and `.env.production` are both gitignored, even though the dev one has little that's truly secret, it's good habit to keep all env files out of version control uniformly.
+`.env` and `.env.development` are both gitignored. The dev one has little that's truly secret, but it's a good habit to keep all env files out of version control.
 
 ---
 
 ## 4. File reference
 
-| File                      | Purpose                                                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `Dockerfile`              | Multi-stage build: `development` (hot reload, full deps) and `production` (minimal, non-root, healthcheck) targets |
-| `docker-compose.dev.yml`  | Runs `app` (dev target) + `neon-local` proxy, creates ephemeral branches                                           |
-| `docker-compose.prod.yml` | Runs `app` (production target) only, connects straight to Neon Cloud                                               |
-| `.env.development`        | Dev env vars: Neon Local/API credentials, no `DATABASE_URL` (set in compose instead)                               |
-| `.env.production`         | Prod env vars: real `DATABASE_URL`, template only, never commit filled-in                                          |
-| `.dockerignore`           | Keeps `node_modules`, `.git`, `.env*`, logs, etc. out of the build context                                         |
+| File                     | Purpose                                                                                                            |
+| ------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `Dockerfile`             | Multi-stage build: `development` (hot reload, full deps) and `production` (minimal, non-root, healthcheck) targets |
+| `docker-compose.dev.yml` | Runs `app` (dev target) + `neon-local` proxy, creates ephemeral branches                                           |
+| `.env.development`       | Dev env vars: Neon Local/API credentials, no `DATABASE_URL` (set in compose instead)                               |
+| `.dockerignore`          | Keeps `node_modules`, `.git`, `.env*`, logs, etc. out of the build context                                         |
 
 ---
 

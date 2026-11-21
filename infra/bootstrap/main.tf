@@ -130,6 +130,12 @@ data "aws_iam_policy_document" "github_deploy" {
     actions = [ "ssm:GetCommandInvocation" ]
     resources = [ "*" ]
   }
+
+  statement {
+    sid = "ReadDatabaseURL"
+    actions = [ "ssm:GetParameter" ]
+    resources = ["arn:aws:ssm:${local.region}:${local.account_id}:parameter/acquisitions/prod/DATABASE_URL"]
+  }
 }
 
 resource "aws_iam_role_policy" "github_deploy" {
