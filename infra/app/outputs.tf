@@ -3,5 +3,5 @@ output "instance_id" {
 }
 
 output "app_url" {
-  value = "http://${aws_instance.app.public_dns}"
+  value = "https://${local.domain}"
 }

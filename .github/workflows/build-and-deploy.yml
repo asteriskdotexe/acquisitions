@@ -106,7 +106,7 @@ jobs:
     env:
       AWS_REGION: ap-south-1
       IMAGE_REPO: shubhamsingh7913/acquisitions
-
+      APP_URL: https://acquisitions.duckdns.org
     steps:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
@@ -188,11 +188,9 @@ jobs:
           fi
 
       - name: Check the app is healthy
-        env:
-          PUBLIC_DNS: ${{ steps.server.outputs.public_dns }}
         run: |
           curl --fail --silent --show-error \
             --retry 10 --retry-delay 3 --retry-all-errors \
-            "http://$PUBLIC_DNS/health"
+            "$APP_URL/health"
           echo ""
-          echo "Deployed sha-${GITHUB_SHA::7} to http://$PUBLIC_DNS" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deployed sha-${GITHUB_SHA::7} to $APP_URL" >> "$GITHUB_STEP_SUMMARY"

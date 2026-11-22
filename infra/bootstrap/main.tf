@@ -3,8 +3,8 @@ terraform {
 
   required_providers {
     aws = {
-        source = "hashicorp/aws"
-        version = "~>6.23"
+      source  = "hashicorp/aws"
+      version = "~>6.23"
     }
   }
 }
@@ -13,19 +13,19 @@ provider "aws" {
   region = "ap-south-1"
 
   default_tags {
-    tags ={
-        Project = "acquisitions"
-        ManagedBy = "terraform"
+    tags = {
+      Project   = "acquisitions"
+      ManagedBy = "terraform"
     }
   }
 }
 
-resource "aws_s3_bucket" "tfstate"{
-    bucket = "shubham-acquisitions-tfstate"
+resource "aws_s3_bucket" "tfstate" {
+  bucket = "shubham-acquisitions-tfstate"
 
-    lifecycle {
-      prevent_destroy = true
-    }
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_s3_bucket_versioning" "tfstate" {
@@ -37,21 +37,21 @@ resource "aws_s3_bucket_versioning" "tfstate" {
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "tfstate" {
-    bucket=aws_s3_bucket.tfstate.id
+  bucket = aws_s3_bucket.tfstate.id
 
-    rule {
-        apply_server_side_encryption_by_default {
-            sse_algorithm = "AES256"
-        }
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
     }
+  }
 }
 
 resource "aws_s3_bucket_public_access_block" "tfstate" {
   bucket = aws_s3_bucket.tfstate.id
 
-  block_public_acls = true
-  block_public_policy = true
-  ignore_public_acls = true
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
   restrict_public_buckets = true
 }
 
@@ -60,35 +60,35 @@ output "state_bucket_name" {
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
-  url = "https://token.actions.githubusercontent.com"
-  client_id_list = [ "sts.amazonaws.com" ]
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
 }
 
 data "aws_iam_policy_document" "github_deploy_assume" {
   statement {
-    actions = [ "sts:AssumeRoleWithWebIdentity" ]
+    actions = ["sts:AssumeRoleWithWebIdentity"]
 
     principals {
-      type = "Federated"
-      identifiers = [ aws_iam_openid_connect_provider.github.arn ]
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
     }
 
     condition {
-      test = "StringEquals"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:aud"
-      values = [ "sts.amazonaws.com" ]
+      values   = ["sts.amazonaws.com"]
     }
 
     condition {
-      test = "StringEquals"
+      test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
-      values = [ "repo:asteriskdotexe@75488681/acquisitions@1359080553:environment:production" ]
+      values   = ["repo:asteriskdotexe@75488681/acquisitions@1359080553:environment:production"]
     }
   }
 }
 
 resource "aws_iam_role" "github_deploy" {
-  name = "acquisitions-github-deploy"
+  name               = "acquisitions-github-deploy"
   assume_role_policy = data.aws_iam_policy_document.github_deploy_assume.json
 }
 
@@ -96,51 +96,51 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  region = data.aws_region.current.region
+  region     = data.aws_region.current.region
   account_id = data.aws_caller_identity.current.account_id
 }
 
 data "aws_iam_policy_document" "github_deploy" {
   statement {
-    sid = "FindAppInstance"
-    actions = [ "ec2:DescribeInstances" ]
-    resources = [ "*" ]
+    sid       = "FindAppInstance"
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
   }
 
   statement {
-    sid = "UseRunShellScript"
-    actions = [ "ssm:SendCommand" ]
-    resources = [ "arn:aws:ssm:${local.region}::document/AWS-RunShellScript" ]
+    sid       = "UseRunShellScript"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ssm:${local.region}::document/AWS-RunShellScript"]
   }
 
   statement {
-    sid = "OnlyOnAppInstance"
-    actions = [ "ssm:SendCommand" ]
-    resources = [ "arn:aws:ec2:${local.region}:${local.account_id}:instance/*" ]
+    sid       = "OnlyOnAppInstance"
+    actions   = ["ssm:SendCommand"]
+    resources = ["arn:aws:ec2:${local.region}:${local.account_id}:instance/*"]
 
     condition {
-      test = "StringEquals"
+      test     = "StringEquals"
       variable = "ssm:resourceTag/Name"
-      values = [ "acquisitions-app" ]
+      values   = ["acquisitions-app"]
     }
   }
 
   statement {
-    sid = "ReadCommandResult"
-    actions = [ "ssm:GetCommandInvocation" ]
-    resources = [ "*" ]
+    sid       = "ReadCommandResult"
+    actions   = ["ssm:GetCommandInvocation"]
+    resources = ["*"]
   }
 
   statement {
-    sid = "ReadDatabaseURL"
-    actions = [ "ssm:GetParameter" ]
+    sid       = "ReadDatabaseURL"
+    actions   = ["ssm:GetParameter"]
     resources = ["arn:aws:ssm:${local.region}:${local.account_id}:parameter/acquisitions/prod/DATABASE_URL"]
   }
 }
 
 resource "aws_iam_role_policy" "github_deploy" {
-  name = "deploy-app"
-  role = aws_iam_role.github_deploy.id
+  name   = "deploy-app"
+  role   = aws_iam_role.github_deploy.id
   policy = data.aws_iam_policy_document.github_deploy.json
 }
 

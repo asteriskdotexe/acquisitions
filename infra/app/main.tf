@@ -3,16 +3,16 @@ terraform {
 
   required_providers {
     aws = {
-        source = "hashicorp/aws"
-        version = "~>6.23"
+      source  = "hashicorp/aws"
+      version = "~>6.23"
     }
   }
 
   backend "s3" {
-    bucket = "shubham-acquisitions-tfstate"
-    key = "app/terraform.tfstate"
-    region = "ap-south-1"
-    encrypt = true
+    bucket       = "shubham-acquisitions-tfstate"
+    key          = "app/terraform.tfstate"
+    region       = "ap-south-1"
+    encrypt      = true
     use_lockfile = true
   }
 }
@@ -22,15 +22,15 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project = "acquisitions"
+      Project   = "acquisitions"
       ManagedBy = "terraform"
     }
   }
 }
 
 resource "aws_vpc" "main" {
-  cidr_block = "10.0.0.0/16"
-  enable_dns_support = true
+  cidr_block           = "10.0.0.0/16"
+  enable_dns_support   = true
   enable_dns_hostnames = true
 
   tags = {
@@ -39,9 +39,9 @@ resource "aws_vpc" "main" {
 }
 
 resource "aws_subnet" "public" {
-  vpc_id = aws_vpc.main.id
-  cidr_block = "10.0.1.0/24"
-  availability_zone = "ap-south-1a"
+  vpc_id                  = aws_vpc.main.id
+  cidr_block              = "10.0.1.0/24"
+  availability_zone       = "ap-south-1a"
   map_public_ip_on_launch = true
 
   tags = {
@@ -71,14 +71,14 @@ resource "aws_route_table" "public" {
 }
 
 resource "aws_route_table_association" "public" {
-  subnet_id = aws_subnet.public.id
+  subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
 
 resource "aws_security_group" "app" {
-  name = "acquisitions-app-sg"
-  description = "Allow HTTP in and all traffic out"
-  vpc_id = aws_vpc.main.id
+  name        = "acquisitions-app-sg"
+  description = "Allow HTTP and HTTPS in and all traffic out"
+  vpc_id      = aws_vpc.main.id
 
   tags = {
     Name = "acquisitions-app-sg"
@@ -87,38 +87,47 @@ resource "aws_security_group" "app" {
 
 resource "aws_vpc_security_group_ingress_rule" "http" {
   security_group_id = aws_security_group.app.id
-  description = "HTTP from anywhere"
-  cidr_ipv4 = "0.0.0.0/0"
-  from_port = 80
-  to_port = 80
-  ip_protocol = "tcp"
+  description       = "HTTP from anywhere"
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 80
+  to_port           = 80
+  ip_protocol       = "tcp"
+}
+
+resource "aws_vpc_security_group_ingress_rule" "https" {
+  security_group_id = aws_security_group.app.id
+  description       = "HTTPS from anywhere"
+  cidr_ipv4         = "0.0.0.0/0"
+  from_port         = 443
+  to_port           = 443
+  ip_protocol       = "tcp"
 }
 
 resource "aws_vpc_security_group_egress_rule" "all" {
   security_group_id = aws_security_group.app.id
-  description = "All outbound traffic"
-  cidr_ipv4 = "0.0.0.0/0"
-  ip_protocol = "-1"
+  description       = "All outbound traffic"
+  cidr_ipv4         = "0.0.0.0/0"
+  ip_protocol       = "-1"
 }
 
-data "aws_iam_policy_document" "ec2_assume_role"{
+data "aws_iam_policy_document" "ec2_assume_role" {
   statement {
     actions = ["sts:AssumeRole"]
 
     principals {
-      type = "Service"
+      type        = "Service"
       identifiers = ["ec2.amazonaws.com"]
     }
   }
 }
 
 resource "aws_iam_role" "app" {
-  name = "acquisitions-app-role"
+  name               = "acquisitions-app-role"
   assume_role_policy = data.aws_iam_policy_document.ec2_assume_role.json
 }
 
 resource "aws_iam_role_policy_attachment" "ssm_core" {
-  role = aws_iam_role.app.name
+  role       = aws_iam_role.app.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
 }
 
@@ -134,7 +143,9 @@ data "aws_caller_identity" "current" {}
 data "aws_region" "current" {}
 
 locals {
-  app_params_arn = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/acquisitions/prod"
+  app_params_arn      = "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter/acquisitions/prod"
+  duckdns_token_param = "/acquisitions/infra/DUCKDNS_TOKEN"
+  domain              = "${var.duckdns_subdomain}.duckdns.org"
 }
 
 data "aws_iam_policy_document" "read_app_params" {
@@ -150,11 +161,19 @@ data "aws_iam_policy_document" "read_app_params" {
       "${local.app_params_arn}/*",
     ]
   }
+
+  statement {
+    sid     = "ReadDuckDNSToken"
+    actions = ["ssm:GetParameter"]
+    resources = [
+      "arn:aws:ssm:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:parameter${local.duckdns_token_param}",
+    ]
+  }
 }
 
 resource "aws_iam_role_policy" "read_app_params" {
-  name = "read-app-parameters"
-  role = aws_iam_role.app.id
+  name   = "read-app-parameters"
+  role   = aws_iam_role.app.id
   policy = data.aws_iam_policy_document.read_app_params.json
 }
 
@@ -163,27 +182,30 @@ data "aws_ssm_parameter" "al2023_ami" {
 }
 
 resource "aws_instance" "app" {
-  ami = data.aws_ssm_parameter.al2023_ami.insecure_value
-  instance_type = "t3.micro"
-  subnet_id = aws_subnet.public.id
-  vpc_security_group_ids = [ aws_security_group.app.id ]
-  iam_instance_profile = aws_iam_instance_profile.app.name
+  ami                    = data.aws_ssm_parameter.al2023_ami.insecure_value
+  instance_type          = "t3.micro"
+  subnet_id              = aws_subnet.public.id
+  vpc_security_group_ids = [aws_security_group.app.id]
+  iam_instance_profile   = aws_iam_instance_profile.app.name
 
-  user_data = templatefile("${path.module}/user_data.sh.tftpl",{
-    region = data.aws_region.current.region
-    param_path = "/acquisitions/prod"
-    app_image = var.app_image
-    log_group = aws_cloudwatch_log_group.app.name
+  user_data = templatefile("${path.module}/user_data.sh.tftpl", {
+    region              = data.aws_region.current.region
+    param_path          = "/acquisitions/prod"
+    app_image           = var.app_image
+    log_group           = aws_cloudwatch_log_group.app.name
+    duckdns_subdomain   = var.duckdns_subdomain
+    duckdns_token_param = local.duckdns_token_param
+    domain              = local.domain
   })
   user_data_replace_on_change = true
-  
-  depends_on = [ 
+
+  depends_on = [
     aws_iam_role_policy.read_app_params,
     aws_iam_role_policy.write_app_logs,
-   ]
+  ]
 
   metadata_options {
-    http_tokens = "required"
+    http_tokens                 = "required" #turns on IMDSv2
     http_put_response_hop_limit = 1
   }
 
@@ -194,11 +216,11 @@ resource "aws_instance" "app" {
   root_block_device {
     volume_type = "gp3"
     volume_size = 8
-    encrypted = true
+    encrypted   = true
   }
 
   lifecycle {
-    ignore_changes = [ ami ]
+    ignore_changes = [ami]
   }
 
   tags = {

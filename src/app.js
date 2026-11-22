@@ -13,6 +13,10 @@ import dealsRoutes from '#routes/deals.routes.js';
 
 const app = express();
 
+// Caddy forwards requests to the app and puts the client's real IP in
+// X-Forwarded-For. Trust that one proxy hop so req.ip is the real client.
+app.set('trust proxy', 1);
+
 app.use(helmet());
 app.use(cors());
 app.use(express.json());
