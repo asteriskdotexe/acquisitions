@@ -1,0 +1,91 @@
+name: Terraform
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/terraform.yml'
+
+permissions:
+  contents: read
+
+env:
+  # Keep in step with the version on your laptop (terraform version)
+  TERRAFORM_VERSION: 1.17.2
+
+jobs:
+  check:
+    name: Format and validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      - name: Check formatting
+        run: terraform fmt -check -recursive -diff infra
+
+      - name: Validate bootstrap
+        working-directory: infra/bootstrap
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+      - name: Validate app
+        working-directory: infra/app
+        run: |
+          terraform init -backend=false -input=false
+          terraform validate
+
+  plan:
+    name: Plan infra/app
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    defaults:
+      run:
+        working-directory: infra/app
+    env:
+      TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+          # Plain Terraform, without the wrapper that adds extra lines to piped output
+          terraform_wrapper: false
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: ${{ vars.AWS_PLAN_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Terraform init
+        run: terraform init -input=false
+
+      # -lock=false: the plan role is read only, so it can't write the S3
+      # lock file. A plan only reads, so skipping the lock is safe.
+      - name: Terraform plan
+        run: terraform plan -input=false -lock=false -no-color | tee plan.txt
+
+      - name: Add plan to job summary
+        run: |
+          {
+            echo "## Terraform plan: infra/app"
+            echo '```'
+            cat plan.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

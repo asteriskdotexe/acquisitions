@@ -147,3 +147,65 @@ resource "aws_iam_role_policy" "github_deploy" {
 output "github_deploy_role_arn" {
   value = aws_iam_role.github_deploy.arn
 }
+
+data "aws_iam_policy_document" "github_plan_assume" {
+  statement {
+    actions = ["sts:AssumeRoleWithWebIdentity"]
+
+    principals {
+      type        = "Federated"
+      identifiers = [aws_iam_openid_connect_provider.github.arn]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:aud"
+      values   = ["sts.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:sub"
+      values   = ["repo:asteriskdotexe@75488681/acquisitions@1359080553:pull_request"]
+    }
+  }
+}
+
+resource "aws_iam_role" "github_plan" {
+  name               = "acquisitions-github-plan"
+  assume_role_policy = data.aws_iam_policy_document.github_plan_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "github_plan_readonly" {
+  role       = aws_iam_role.github_plan.name
+  policy_arn = "arn:aws:iam::aws:policy/ReadOnlyAccess"
+}
+
+data "aws_iam_policy_document" "github_plan_no_secrets" {
+  statement {
+    sid    = "NoAppSecrets"
+    effect = "Deny"
+    actions = [
+      "ssm:GetParameter",
+      "ssm:GetParameters",
+      "ssm:GetParametersByPath",
+      "ssm:GetParameterHistory",
+    ]
+    resources = ["arn:aws:ssm:${local.region}:${local.account_id}:parameter/acquisitions/*"]
+  }
+}
+
+resource "aws_iam_role_policy" "github_plan_no_secrets" {
+  name   = "no-app-secrets"
+  role   = aws_iam_role.github_plan.name
+  policy = data.aws_iam_policy_document.github_plan_no_secrets.json
+}
+
+output "github_plan_role_arn" {
+  value = aws_iam_role.github_plan.arn
+}
+
+moved {
+  from = aws_iam_role_policy.name
+  to   = aws_iam_role_policy.github_plan_no_secrets
+}
