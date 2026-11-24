@@ -108,6 +108,9 @@ jobs:
       IMAGE_REPO: shubhamsingh7913/acquisitions
       APP_URL: https://acquisitions.duckdns.org
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v6
         with:
@@ -130,8 +133,17 @@ jobs:
           echo "instance_id=$INSTANCE_ID" >> "$GITHUB_OUTPUT"
           echo "public_dns=$PUBLIC_DNS" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout code
-        uses: actions/checkout@v5
+      - name: Record the running image
+        id: current
+        env:
+          INSTANCE_ID: ${{ steps.server.outputs.instance_id }}
+        run: |
+          # Single quotes on purpose: $(...) must run on the server, not here
+          # shellcheck disable=SC2016
+          CMD='docker image inspect --format "{{index .RepoDigests 0}}" "$(docker inspect --format "{{.Image}}" acquisitions 2>/dev/null)" 2>/dev/null || true'
+          IMAGE=$(bash scripts/run-on-server.sh "$INSTANCE_ID" "Record running image" "$CMD")
+          echo "Running now: ${IMAGE:-none}"
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
 
       - name: Set up Node.js 22.x
         uses: actions/setup-node@v5
@@ -160,32 +172,7 @@ jobs:
         run: |
           IMAGE="$IMAGE_REPO:sha-${GITHUB_SHA::7}"
           echo "Deploying $IMAGE to $INSTANCE_ID"
-
-          COMMAND_ID=$(aws ssm send-command \
-            --instance-ids "$INSTANCE_ID" \
-            --document-name AWS-RunShellScript \
-            --comment "Deploy sha-${GITHUB_SHA::7}" \
-            --parameters "commands=/usr/local/bin/deploy-app $IMAGE" \
-            --query "Command.CommandId" \
-            --output text)
-
-          # Wait for the command to finish. The waiter exits with an error if
-          # the command fails, so `|| true` lets us print the output first.
-          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" || true
-
-          invocation() {
-            aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" --query "$1" --output text
-          }
-
-          echo "--- Output from the server ---"
-          invocation StandardOutputContent
-          invocation StandardErrorContent
-
-          STATUS=$(invocation Status)
-          if [ "$STATUS" != "Success" ]; then
-            echo "::error title=Deploy failed::The deploy script finished with status $STATUS. See the output above."
-            exit 1
-          fi
+          bash scripts/run-on-server.sh "$INSTANCE_ID" "Deploy sha-${GITHUB_SHA::7}" "/usr/local/bin/deploy-app $IMAGE"
 
       - name: Check the app is healthy
         run: |
