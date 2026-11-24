@@ -167,6 +167,7 @@ jobs:
           npm run db:migrate
 
       - name: Deploy the new image
+        id: deploy
         env:
           INSTANCE_ID: ${{ steps.server.outputs.instance_id }}
         run: |
@@ -175,9 +176,28 @@ jobs:
           bash scripts/run-on-server.sh "$INSTANCE_ID" "Deploy sha-${GITHUB_SHA::7}" "/usr/local/bin/deploy-app $IMAGE"
 
       - name: Check the app is healthy
+        id: health
         run: |
           curl --fail --silent --show-error \
             --retry 10 --retry-delay 3 --retry-all-errors \
             "$APP_URL/health"
           echo ""
           echo "Deployed sha-${GITHUB_SHA::7} to $APP_URL" >> "$GITHUB_STEP_SUMMARY"
+
+      # Runs only if the deploy or the health check failed and an image was
+      # running before. The job still ends as failed, so the bad deploy is
+      # visible, but the site is back on the last working version.
+      - name: Roll back to the previous image
+        if: failure() && steps.current.outputs.image != '' && (steps.deploy.outcome == 'failure' || steps.health.outcome == 'failure')
+        env:
+          INSTANCE_ID: ${{ steps.server.outputs.instance_id }}
+          PREVIOUS_IMAGE: ${{ steps.current.outputs.image }}
+        run: |
+          echo "::warning title=Rolling back::Deploy of sha-${GITHUB_SHA::7} failed. Restoring $PREVIOUS_IMAGE"
+          bash scripts/run-on-server.sh "$INSTANCE_ID" "Roll back sha-${GITHUB_SHA::7}" "/usr/local/bin/deploy-app $PREVIOUS_IMAGE"
+
+          curl --fail --silent --show-error \
+            --retry 10 --retry-delay 3 --retry-all-errors \
+            "$APP_URL/health"
+          echo ""
+          echo "Deploy of sha-${GITHUB_SHA::7} failed. Rolled back to $PREVIOUS_IMAGE" >> "$GITHUB_STEP_SUMMARY"
