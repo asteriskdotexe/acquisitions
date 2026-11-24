@@ -30,10 +30,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v5
 
-      # QEMU lets the amd64 runner build the linux/arm64 image too.
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -75,14 +71,14 @@ jobs:
           TAGS: ${{ steps.meta.outputs.tags }}
           DIGEST: ${{ steps.build.outputs.digest }}
         run: |
-          IMAGE_NAME="$(echo "$TAGS" | head -n 1 | cut -d: -f1)"
+          IMAGE_NAME="$(echo "$TAGS" | head -n 1 | cut -d: -f1)" #shubhamsingh7913/acquisitions
 
           {
             echo "## Docker image published"
             echo ""
             echo "**Image:** \`$IMAGE_NAME\`"
             echo ""
-            echo "**Platforms:** linux/amd64, linux/arm64"
+            echo "**Platforms:** linux/amd64"
             echo ""
             echo "**Digest:** \`$DIGEST\`"
             echo ""
