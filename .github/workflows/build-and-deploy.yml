@@ -63,7 +63,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
+          cache-from: type=gha #GitHub's own cache storage for Actions
           cache-to: type=gha,mode=max
 
       - name: Add summary
@@ -176,7 +176,7 @@ jobs:
         run: |
           curl --fail --silent --show-error \
             --retry 10 --retry-delay 3 --retry-all-errors \
-            "$APP_URL/health-rollback-test"
+            "$APP_URL/health"
           echo ""
           echo "Deployed sha-${GITHUB_SHA::7} to $APP_URL" >> "$GITHUB_STEP_SUMMARY"
 
