@@ -176,7 +176,7 @@ jobs:
         run: |
           curl --fail --silent --show-error \
             --retry 10 --retry-delay 3 --retry-all-errors \
-            "$APP_URL/health"
+            "$APP_URL/health-rollback-test"
           echo ""
           echo "Deployed sha-${GITHUB_SHA::7} to $APP_URL" >> "$GITHUB_STEP_SUMMARY"
 
